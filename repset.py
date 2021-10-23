@@ -110,6 +110,7 @@ def run_psiblast(workdir, seqs):
             seq_id2 = line[1]
             pident = float(line[2])
             evalue = line[5]
+            evalue = float(evalue) + 1e-80
             log10_e = math.log10(float(evalue))
             if float(evalue) <= 1e-2:
                 db[seq_id2]["neighbors"][seq_id1] = {"log10_e": log10_e, "pct_identical": pident}
