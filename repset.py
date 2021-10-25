@@ -110,7 +110,7 @@ def run_psiblast(workdir, seqs):
             seq_id2 = line[1]
             pident = float(line[2])
             evalue = line[5]
-            evalue = float(evalue) + 1e-80
+            evalue = float(evalue) + 1e-80 # Here, we would have number of identical aligned pairs in esl-alipd instead of evalue
             log10_e = math.log10(float(evalue))
             if float(evalue) <= 1e-2:
                 db[seq_id2]["neighbors"][seq_id1] = {"log10_e": log10_e, "pct_identical": pident}
@@ -428,7 +428,7 @@ def sim_from_db(db, sim, seq_id1, seq_id2):
 def sim_from_neighbor(sim, d):
     return sim(d["log10_e"], d["pct_identical"])
 
-def fraciden(log10_e, pct_identical):
+def fraciden(log10_e, pct_identical):  # Not using log10_e at all
     return float(pct_identical) / 100
 
 def rankpropsim(log10_e, pct_identical):
@@ -1582,12 +1582,12 @@ def binary_parameter_search(f, low_x, high_x, num_iterations=30):
 ###############################################################
 
 if __name__ == "__main__":
-    db = run_psiblast(workdir, args.seqs)
+    db = run_psiblast(workdir, args.seqs)  # Make db with PI and log10(evalues)
     objective = MixtureObjective([summaxacross, sumsumwithin], [args.mixture, 1.0-args.mixture])
     logger.info("-----------------------")
     logger.info("Starting mixture of summaxacross and sumsumwithin with weight %s...", args.mixture)
     sim, sim_name = ([fraciden, fraciden], "fraciden-fraciden")
-    repset_order = accelerated_greedy_selection(db, objective, sim)
+    repset_order = accelerated_greedy_selection(db, objective, sim) # Call main algorithm
 
     with open(workdir / "repset.txt", "w") as f:
         for seq_id in repset_order:
