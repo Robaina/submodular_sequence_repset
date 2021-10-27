@@ -1,5 +1,11 @@
+# UPDATE (October, 2021)
 
-# Protein sequence representative set selection using submodular optimization #
+In this fork, I have restructured the project. Major changes include:
+
+1) Ported to Python3
+2) New function to get pairwise sequence percent identities from the output file of ```esl-alipid```, which computes identities from a MSA file. The old function ```run_psiblast()``` is maintained in the project. I made this change to speed up the algorithm, since psiblast takes long time to compute percent identities when querying a large list of sequences.
+3) Code and project refactoring. Split the original script into modules.
+# Protein sequence representative set selection using submodular optimization
 
 This script selects a representative set of protein or DNA sequences from a larger set using submodular optimization. See [this manuscript](https://doi.org/10.1101/051201) for more information.
 
