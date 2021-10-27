@@ -1,5 +1,9 @@
 #!/bin/env python
 
+"""
+Original script, runs on Python 2
+"""
+
 import sys
 import os
 import argparse

@@ -6,11 +6,10 @@ Each returns either a specific subset or an order.
 
 import subprocess
 import random
-from path import path
+from pathlib import Path
 import copy
 import heapq
 import resource
-import logging
 
 import numpy
 import sklearn.cluster
@@ -19,8 +18,6 @@ from repset.similarity import *
 from repset.objectives import summaxacross
 
 
-logger = logging.getLogger('log') # get logger object from main module where parser is located
-
 # random selection
 # returns an order
 def random_selection(db):
@@ -28,7 +25,7 @@ def random_selection(db):
 
 # naive greedy selecition
 # returns an order
-def naive_greedy_selection(db, objective, sim):
+def naive_greedy_selection(db, objective, sim, logger):
     not_in_repset = set(db.keys())
     repset = []
     objective_data = objective["base_data"](db, sim)
@@ -47,7 +44,9 @@ def naive_greedy_selection(db, objective, sim):
     return repset
 
 # returns an order
-def accelerated_greedy_selection(db, objective, sim, max_evals=float("inf"), diff_approx_ratio=1.0, repset_size=float("inf"), target_obj_val=float("inf")):
+def accelerated_greedy_selection(db, objective, sim, max_evals=float("inf"),
+                                 diff_approx_ratio=1.0, repset_size=float("inf"),
+                                 target_obj_val=float("inf"), logger=None):
     assert diff_approx_ratio <= 1.0
     repset = []
     pq = [(-float("inf"), seq_id) for seq_id in db]
@@ -88,7 +87,7 @@ def complement_greedy_selection(db, objective, sim):
     return repset_order[::-1]
 
 
-def stochastic_greedy_selection(db, objective, sim, sample_size, repset_size=float("inf")):
+def stochastic_greedy_selection(db, objective, sim, sample_size, repset_size=float("inf"), logger=None):
     repset = []
     objective_data = objective["base_data"](db, sim)
     cur_objective = 0
@@ -125,7 +124,7 @@ def stochastic_greedy_selection(db, objective, sim, sample_size, repset_size=flo
 # Returns a set
 # Like graphcdhit_selection, but works for arbitrary objectives
 # Uses objective["diff"]
-def threshold_selection(db, objective, sim, diff_threshold, order_by_length=True):
+def threshold_selection(db, objective, sim, diff_threshold, order_by_length=True, logger=None):
     repset = [] # [{"id": id, "objective": objective}]
     objective_data = objective["base_data"](db, sim)
     if order_by_length:
@@ -144,7 +143,7 @@ def threshold_selection(db, objective, sim, diff_threshold, order_by_length=True
             objective_data = objective["update"](db, seq_id, sim, objective_data)
     return repset
 
-def nonmonotone_selection(db, objective, sim, modular_bonus):
+def nonmonotone_selection(db, objective, sim, modular_bonus, logger=None):
     id_order = random.sample(db.keys(), len(db.keys()))
     growing_set = set()
     shrinking_set = set(copy.deepcopy(db.keys()))
@@ -183,7 +182,7 @@ def nonmonotone_selection(db, objective, sim, modular_bonus):
 def cdhit_selection(db, workdir, c=0.9):
     seqs = {seq_id: str(db[seq_id]["seq"]) for seq_id in db}
 
-    workdir = path(workdir)
+    workdir = Path(workdir)
     if not workdir.exists():
         workdir.makedirs()
     infile = workdir / "in.fasta"
@@ -198,7 +197,7 @@ def cdhit_selection(db, workdir, c=0.9):
     elif (c > 0.5) and (c <= 0.6): n = "3"
     else: n = "2"
 
-    outfile = path(workdir) / "out.cdhit"
+    outfile = Path(workdir) / "out.cdhit"
     subprocess.check_call(["/net/noble/vol2/home/maxwl/Code/cdhit.git/trunk/cd-hit",
                            "-i", infile,
                            "-o", outfile,
@@ -218,7 +217,7 @@ def cdhit_selection(db, workdir, c=0.9):
 
 # Like CD-HIT, but using my own implementation
 # rather than calling the executable
-def graph_cdhit_selection(db, sim, threshold=0.9, order_by_length=True):
+def graph_cdhit_selection(db, sim, threshold=0.9, order_by_length=True, logger=None):
     repset = set()
     if order_by_length:
         seq_ids_ordered = sorted(db.keys(), key=lambda seq_id: -len(str(db[seq_id]["seq"])))
@@ -273,7 +272,9 @@ def cluster_selection(db, sim, k):
     return repset
 
 # Use a clustering algorithm from sklearn
-def sklearn_cluster_selection(db, db_seq_ids, db_seq_indices, sim, num_clusters_param, representative_type, cluster_type):
+def sklearn_cluster_selection(db, db_seq_ids, db_seq_indices, sim,
+                              num_clusters_param, representative_type,
+                              cluster_type, logger=None):
     #logger.info("Starting sklearn_cluster_selection: representative_type {representative_type} cluster_type {cluster_type} num_clusters_param {num_clusters_param}".format(**locals()))
     # Relevant clustering methods: Affinity prop, Spectral cluster, Agglomerative clustering
     logger.info("Starting creating similarity matrix...")

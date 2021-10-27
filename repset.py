@@ -15,7 +15,6 @@ from repset.similarity import fraciden
 from repset.optimization import accelerated_greedy_selection
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Find representative sets of sequences of given size")
     parser.add_argument("--outdir", type=Path, required=True, help="Output directory")
@@ -56,15 +55,15 @@ else:
 
 
 if __name__ == "__main__":
-    
+
     print('Reading PI database...')
-    db = get_pident_from_file(pi_file=args.pi) #, seqs=args.seqs) # Make db with PI from esl-alipid
+    db = get_pident_from_file(pi_file=args.pi)
     print('Finished building database...')
     objective = MixtureObjective([summaxacross, sumsumwithin], [args.mixture, 1.0-args.mixture])
     logger.info("-----------------------")
     logger.info("Starting mixture of summaxacross and sumsumwithin with weight %s...", args.mixture)
     sim, sim_name = ([fraciden, fraciden], "fraciden-fraciden")
-    repset_order = accelerated_greedy_selection(db, objective, sim, repset_size=args.size) # Call main algorithm
+    repset_order = accelerated_greedy_selection(db, objective, sim, repset_size=args.size)
 
     with open(workdir / "repset.txt", "w") as f:
         for seq_id in repset_order:

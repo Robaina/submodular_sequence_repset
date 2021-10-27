@@ -4,23 +4,14 @@
 Create pairwise percent identity database
 """
 
-# import argparse
 import subprocess
 import math
-# import random
-# from pathlib import Path
-# import copy
-# import math
-# import heapq
-import logging
 
 import pandas as pd
-# import numpy
 from Bio import SeqIO
 
-logger = logging.getLogger('log') # get logger object from main module where parser is located
 
-def run_psiblast(workdir, seqs):
+def run_psiblast(workdir, seqs, logger):
     # Create psiblast db
     if not (workdir / "db").exists():
         cmd = ["makeblastdb",
@@ -64,7 +55,7 @@ def run_psiblast(workdir, seqs):
                 db[seq_id1]["in_neighbors"][seq_id2] = {"log10_e": log10_e, "pct_identical": pident}
     return db
 
-def get_pident_from_file(pi_file): #, seqs):
+def get_pident_from_file(pi_file):
     """
     Parse esl-alipid output file
     """
@@ -79,12 +70,6 @@ def get_pident_from_file(pi_file): #, seqs):
     print('Dataframe built')
     
     db = {}
-    # fasta_sequences = SeqIO.parse(seqs,'fasta') # open not needed (at least in python3)
-    # # Initialize dict
-    # for seq in fasta_sequences:
-    #     seq_id = seq.id
-    #     db[seq_id] = {"neighbors": {}, "in_neighbors": {}} # , "seq": seq.seq}  # (Removed to save RAM)
-    
     for i, row in df.iterrows():
         seq_id1 = row.seqname1.split('/')[0]
         seq_id2 = row.seqname2.split('/')[0]
