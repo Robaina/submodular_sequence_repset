@@ -1,164 +1,26 @@
-#!/bin/env python
-
 """
-1. Compatible with Python3
-2. Reads percent identity from els-alipid output file instead of calling psi-blast
+Objective functions
+-----------------
+An objective is a dictionary
+{
+    "eval": db, seq_ids, sim -> float, # The value of an objective function
+    "diff": db, seq_ids, sim, data -> float, # The difference in value after adding seq_id
+    "negdiff": db, seq_ids, sim, data -> float, # The difference in value after removing seq_id
+    "update": db, seq_ids, sim, data -> data, # Update the data structure to add seq_id as a representative
+    "negupdate": db, seq_ids, sim, data -> data, # Update the data structure to remove seq_id as a representative
+    "base_data": db, sim -> data, # The data structure corresponding to no representatives chosen
+    "full_data": db, sim -> data, # The data structure corresponding to all representatives chosen
+    "name": name
+}
+
+db: Database
+sim: Similiarity function
+data: function-specific data structure which may be modified over the course of an optimization algorithm
 """
 
-import argparse
-# import subprocess
-# import math
-import random
-from pathlib import Path
 import copy
-# import math
-import heapq
-import logging
+from repset.similarity import *
 
-import pandas as pd
-import numpy
-from Bio import SeqIO
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--outdir", type=Path, required=True, help="Output directory")
-    parser.add_argument("--seqs", type=Path, required=True, help="Input sequences, fasta format")
-    parser.add_argument("--pi", type=str, required=True, help="Input text file with PI from els-alipid")
-    parser.add_argument("--mixture", type=float, default=0.5, help="Mixture parameter determining the relative weight of facility-location relative to sum-redundancy. Default=0.5")
-    parser.add_argument("--size", type=int, default=float("inf"), help="Repset size. Default=inf")
-    args = parser.parse_args()
-    workdir = args.outdir
-
-    assert args.mixture >= 0.0
-    assert args.mixture <= 1.0
-
-    if not workdir.exists():
-        workdir.makedirs()
-
-    # Logging
-    logging.basicConfig(format="%(asctime)s %(levelname)s:%(message)s")
-    logger = logging.getLogger('log')
-    logger.setLevel(logging.DEBUG)
-    # create file handler which logs even debug messages
-    fh = logging.FileHandler(workdir / "stdout.txt")
-    fh.setLevel(logging.DEBUG) # >> this determines the file level
-    # create console handler with a higher log level
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)# >> this determines the output level
-    # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
-    fh.setFormatter(formatter)
-    # add the handlers to logger
-    logger.addHandler(ch)
-    logger.addHandler(fh)
-else:
-    logger = logging.getLogger('log')
-
-
-def get_pident(pi_file): #, seqs):
-    """
-    Parse esl-alipid output file
-    """
-    print('Building dataframe')
-    df = pd.read_csv(
-        pi_file, sep='\s+',
-        skiprows=1, header=None
-    )
-    df.columns = [
-        'seqname1', 'seqname2', '%id', 'nid', 'denomid', '%match', 'nmatch', 'denommatch'
-        ]
-    print('Dataframe built')
-    
-    db = {}
-    # fasta_sequences = SeqIO.parse(seqs,'fasta') # open not needed (at least in python3)
-    # # Initialize dict
-    # for seq in fasta_sequences:
-    #     seq_id = seq.id
-    #     db[seq_id] = {"neighbors": {}, "in_neighbors": {}} # , "seq": seq.seq}  # (Removed to save RAM)
-    
-    for i, row in df.iterrows():
-        seq_id1 = row.seqname1.split('/')[0]
-        seq_id2 = row.seqname2.split('/')[0]
-        # print(seq_id1, seq_id2)
-        log10_e = -100
-        pident = row['%id']
-
-        # Originally filtering pairs with evalue > 1e-2 (perhaps nid, %match)
-        db[seq_id1] = {"neighbors": {}, "in_neighbors": {}}
-        db[seq_id2] = {"neighbors": {}, "in_neighbors": {}}
-
-        # if seq_id1 in db.keys() and seq_id2 in db.keys():
-        db[seq_id2]["neighbors"][seq_id1] = {"log10_e": log10_e, "pct_identical": pident}
-        db[seq_id1]["in_neighbors"][seq_id2] = {"log10_e": log10_e, "pct_identical": pident}
-
-    del df
-    return db
-
-
-###############################################################
-###############################################################
-# Submodular optimization functions
-###############################################################
-###############################################################
-
-#############################
-# Similarity functions
-#############################
-
-def sim_from_db(db, sim, seq_id1, seq_id2):
-    d = db[seq_id1]["neighbors"][seq_id2]
-    return sim_from_neighbor(sim, d)
-
-def sim_from_neighbor(sim, d):
-    return sim(d["log10_e"], d["pct_identical"])
-
-def fraciden(log10_e, pct_identical):  # Not using log10_e at all
-    return float(pct_identical) / 100
-
-def rankpropsim(log10_e, pct_identical):
-    return numpy.exp(-numpy.power(10, log10_e) / 100.0)
-
-def rankpropsim_loge(log10_e, pct_identical):
-    return numpy.exp(-log10_e / 100.0)
-
-def logloge(log10_e, pct_identical):
-    if (-log10_e) <= 0.1:
-        return 0.0
-    elif (-log10_e) >= 1000:
-        return 3.0
-    else:
-        return numpy.log10(-log10_e)
-
-def oneprankpropsim(log10_e, pct_identical):
-    return 1.0 + 1e-3 * rankpropsim_loge(log10_e, pct_identical)
-
-def prodevaliden(log10_e, pct_identical):
-    return fraciden(log10_e, pct_identical) * logloge(log10_e, pct_identical) / 3
-
-def one(log10_e, pct_identical):
-    return 1.0
-
-def p90(log10_e, pct_identical):
-    return float(pct_identical >= 0.9)
-
-
-#############################
-# Objective functions
-# -----------------
-# An objective is a dictionary
-# {"eval": db, seq_ids, sim -> float, # The value of an objective function
-#  "diff": db, seq_ids, sim, data -> float, # The difference in value after adding seq_id
-#  "negdiff": db, seq_ids, sim, data -> float, # The difference in value after removing seq_id
-#  "update": db, seq_ids, sim, data -> data, # Update the data structure to add seq_id as a representative
-#  "negupdate": db, seq_ids, sim, data -> data, # Update the data structure to remove seq_id as a representative
-#  "base_data": db, sim -> data, # The data structure corresponding to no representatives chosen
-#  "full_data": db, sim -> data, # The data structure corresponding to all representatives chosen
-#  "name": name}
-# db: Database
-# sim: Similiarity function
-# data: function-specific data structure which may be modified over the course of an optimization algorithm
-#############################
 
 ######################
 # summaxacross
@@ -259,6 +121,50 @@ summaxacross = {"eval": summaxacross_eval,
           "name": "summaxacross"}
 
 ######################
+# minmaxacross
+# Most comparable to CD-HIT
+# Eval only
+######################
+
+def minmaxacross_eval(db, seq_ids, sim):
+    max_sim = {seq_id:0 for seq_id in db}
+    for chosen_seq_id in seq_ids:
+        for neighbor_seq_id, d in db[chosen_seq_id]["in_neighbors"].items():
+            if neighbor_seq_id in max_sim:
+                sim_val = sim(d["log10_e"], d["pct_identical"])
+                if sim_val > max_sim[neighbor_seq_id]:
+                    max_sim[neighbor_seq_id] = sim_val
+                #max_sim[neighbor_seq_id] = max(max_sim[neighbor_seq_id], sim(d["log10_e"], d["pct_identical"]))
+            else:
+                pass
+                #raise Exception("Found node with neighbor not in set")
+
+    return min(max_sim.values())
+
+minmaxacross = {"eval": minmaxacross_eval,
+          "name": "minmaxacross"}
+
+######################
+# maxmaxwithin
+# Also comparable to CD-HIT
+# Eval only
+######################
+
+def maxmaxwithin_eval(db, seq_ids, sim):
+    max_sim = float("-inf")
+    seq_ids_set = set(seq_ids)
+    for chosen_seq_id in seq_ids:
+        for neighbor_seq_id, d in db[chosen_seq_id]["neighbors"].items():
+            if (neighbor_seq_id in seq_ids_set) and (neighbor_seq_id != chosen_seq_id):
+                sim_val = sim(d["log10_e"], d["pct_identical"])
+                if sim_val > max_sim:
+                    max_sim = sim_val
+    return -max_sim
+
+maxmaxwithin = {"eval": maxmaxwithin_eval,
+                "name": "maxmaxwithin"}
+
+######################
 # summaxwithin
 # AKA negfacloc
 ######################
@@ -283,7 +189,7 @@ def summaxwithin_eval(db, seq_ids, sim):
 # "representatives" {seq_id: {example: val}}
 
 summaxwithin_base_data = lambda db, sim: {"examples": {seq_id: (None, 0) for seq_id in db},
-                                          "representatives": {}}
+                                              "representatives": {}}
 
 def summaxwithin_full_data(db, sim):
     data = {}
@@ -379,13 +285,13 @@ def summaxwithin_negupdate(db, seq_id, sim, data):
     return data
 
 summaxwithin = {"eval": summaxwithin_eval,
-                "diff": summaxwithin_diff,
-                "negdiff": summaxwithin_negdiff,
-                "update": summaxwithin_update,
-                "negupdate": summaxwithin_negupdate,
-                "base_data": summaxwithin_base_data,
-                "full_data": summaxwithin_full_data,
-                "name": "summaxwithin"}
+          "diff": summaxwithin_diff,
+          "negdiff": summaxwithin_negdiff,
+          "update": summaxwithin_update,
+          "negupdate": summaxwithin_negupdate,
+          "base_data": summaxwithin_base_data,
+          "full_data": summaxwithin_full_data,
+          "name": "summaxwithin"}
 
 
 ######################
@@ -509,6 +415,142 @@ sumsumacross = {"eval": sumsumacross_eval,
           "name": "sumsumacross"}
 
 ######################
+# lengthobj
+######################
+
+def lengthobj_eval(db, seq_ids, sim):
+    s = 0
+    for chosen_id in seq_ids:
+        s += len(db[chosen_id]["seq"])
+    return s
+
+lengthobj_base_data = lambda db, sim: None
+lengthobj_full_data = lambda db, sim: None
+
+def lengthobj_diff(db, seq_id, sim, data):
+    return len(db[seq_id]["seq"])
+
+def lengthobj_negdiff(db, seq_id, sim, data):
+    return len(db[seq_id]["seq"])
+
+def lengthobj_update(db, seq_id, sim, data):
+    #raise Exception("Not used")
+    return None
+
+def lengthobj_negupdate(db, seq_id, sim, data):
+    #raise Exception("Not used")
+    return None
+
+lengthobj = {"eval": lengthobj_eval,
+          "diff": lengthobj_diff,
+          "negdiff": lengthobj_negdiff,
+          "update": lengthobj_update,
+          "negupdate": lengthobj_negupdate,
+          "base_data": lengthobj_base_data,
+          "full_data": lengthobj_full_data,
+          "name": "lengthobj"}
+
+
+
+######################
+# graphcut
+######################
+
+graphcut = {"eval": lambda *args: sumsumacross_eval(*args) + sumsumwithin_eval(*args),
+          "diff": lambda *args: sumsumacross_diff(*args) + sumsumwithin_diff(*args),
+          "negdiff": lambda *args: sumsumacross_negdiff(*args) + sumsumwithin_negdiff(*args),
+          "update": sumsumwithin_update,
+          "negupdate": sumsumwithin_negupdate,
+          "base_data": sumsumwithin_base_data,
+          "full_data": sumsumwithin_full_data,
+          "name": "graphcut"}
+
+######################
+# uniform
+######################
+def uniform_eval(db, seq_ids, sim):
+    return len(seq_ids)
+
+uniform_base_data = lambda db, sim: None
+uniform_full_data = lambda db, sim: None
+
+def uniform_diff(db, seq_id, sim, data):
+    return 1
+
+def uniform_negdiff(db, seq_id, sim, data):
+    return -1
+
+def uniform_update(db, seq_id, sim, data):
+    #raise Exception("Not used")
+    return None
+
+def uniform_negupdate(db, seq_id, sim, data):
+    #raise Exception("Not used")
+    return None
+
+uniform = {"eval": uniform_eval,
+          "diff": uniform_diff,
+          "negdiff": uniform_negdiff,
+          "update": uniform_update,
+          "negupdate": uniform_negupdate,
+          "base_data": uniform_base_data,
+          "full_data": uniform_full_data,
+          "name": "uniform"}
+
+
+####################
+# Objective classes
+####################
+
+class SetCover(object):
+    def __init__(self, threshold):
+        self.threshold = threshold
+        self.name = "setcover-" + str(self.threshold)
+
+    def __getitem__(self, key):
+        return self.__getattribute__(key)
+
+    def eval(self, db, seq_ids, sim):
+        s = 0
+        for seq_id in db:
+            for neighbor_seq_id, d in db[seq_id]["neighbors"].items():
+                if sim_from_neighbor(sim, d) >= self.threshold:
+                    s += 1
+                    break
+        return s
+
+    def diff(self, db, seq_id, sim, data):
+        s = 0
+        for neighbor_seq_id, d in db[seq_id]["in_neighbors"].items():
+            if neighbor_seq_id in data:
+                if not data[neighbor_seq_id]:
+                    if sim_from_neighbor(sim, d) >= self.threshold:
+                        s += 1
+        return s
+
+    def negdiff(self, db, seq_id, sim, data):
+        raise Exception()
+
+    def update(self, db, seq_id, sim, data):
+        for neighbor_seq_id, d in db[seq_id]["in_neighbors"].items():
+            if neighbor_seq_id in data:
+                if not data[neighbor_seq_id]:
+                    if sim_from_neighbor(sim, d) >= self.threshold:
+                        data[neighbor_seq_id] = True
+        return data
+
+    def negupdate(self, db, seq_id, sim, datas):
+        raise Exception()
+
+    def base_data(self, db, sim):
+        return {seq_id: False for seq_id in db}
+
+    def full_data(self, db, sim):
+        return {seq_id: (sim_from_db(db, sim, seq_id, seq_id) >= self.threshold)
+                for seq_id in db}
+
+
+######################
 # MixtureObjective
 # ------------------------
 # Create a mixture objective with:
@@ -574,68 +616,3 @@ class MixtureObjective(object):
         for i, objective in enumerate(self.objectives):
             datas.append(objective["full_data"](db, sims[i]))
         return datas
-
-
-#############################
-# Optimization algorithms
-# -------------------------
-# Each returns either a specific
-# subset or an order.
-#############################
-
-
-# returns an order
-def accelerated_greedy_selection(db, objective, sim, max_evals=float("inf"), diff_approx_ratio=1.0, repset_size=float("inf"), target_obj_val=float("inf")):
-    
-    print(f'Repset size: {repset_size}')
-    
-    assert diff_approx_ratio <= 1.0
-    repset = []
-    pq = [(-float("inf"), seq_id) for seq_id in db]
-    objective_data = objective["base_data"](db, sim)
-    cur_objective = 0
-    num_evals = 0
-    while (len(repset) < repset_size) and (len(pq) > 1) and (cur_objective < target_obj_val):
-        possible_diff, seq_id = heapq.heappop(pq)
-        diff = objective["diff"](db, seq_id, sim, objective_data)
-        next_diff = -pq[0][0]
-        num_evals += 1
-        if (num_evals >= max_evals) or (((diff - next_diff) / (abs(diff)+0.01)) >= (diff_approx_ratio - 1.0)):
-            repset.append(seq_id)
-            objective_data = objective["update"](db, seq_id, sim, objective_data)
-            cur_objective += diff
-            #assert(abs(cur_objective - objective["eval"](db, repset, sim)) < 1e-3)
-            #if (len(repset) % 100) == 0: logger.debug("Accelerated greedy iteration: %s", len(repset))
-            #print len(repset), num_evals # XXX
-            #print len(repset), cur_objective
-            num_evals = 0
-        else:
-            heapq.heappush(pq, (-diff, seq_id))
-    if len(pq) == 1:
-        repset.append(pq[0][1])
-    return repset
-
-
-
-###############################################################
-###############################################################
-# Run optimization and output
-###############################################################
-###############################################################
-
-if __name__ == "__main__":
-    # db = run_psiblast(workdir, args.seqs)  
-    print('Reading PI database...')
-    db = get_pident(pi_file=args.pi) #, seqs=args.seqs) # Make db with PI from esl-alipid
-    print('Finished building database...')
-    objective = MixtureObjective([summaxacross, sumsumwithin], [args.mixture, 1.0-args.mixture])
-    logger.info("-----------------------")
-    logger.info("Starting mixture of summaxacross and sumsumwithin with weight %s...", args.mixture)
-    sim, sim_name = ([fraciden, fraciden], "fraciden-fraciden")
-    repset_order = accelerated_greedy_selection(db, objective, sim, repset_size=args.size) # Call main algorithm
-
-    with open(workdir / "repset.txt", "w") as f:
-        for seq_id in repset_order:
-            f.write(seq_id)
-            f.write("\n")
-
