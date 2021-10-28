@@ -1,8 +1,8 @@
 #!/bin/env python
 
 """
-1. Compatible with Python3
-2. Reads percent identity from els-alipid output file instead of calling psi-blast
+Repset:
+Find representative sets of sequences of given size.
 """
 
 import argparse
