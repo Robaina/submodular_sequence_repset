@@ -66,7 +66,7 @@ if __name__ == "__main__":
         db = get_pident_from_file(pi_file=args.pi)
         print('Finished building database...')
     else:
-        db = run_psiblast(workdir, args.seqs)
+        db = run_psiblast(workdir, args.seqs, logger)
     objective = MixtureObjective([summaxacross, sumsumwithin], [args.mixture, 1.0-args.mixture])
     logger.info("-----------------------")
     logger.info("Starting mixture of summaxacross and sumsumwithin with weight %s...", args.mixture)

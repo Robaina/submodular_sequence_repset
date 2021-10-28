@@ -1,4 +1,5 @@
-repset/__pychache__/
+repset/__pycache__/
 .ipynb_checkpoints/
 NOTE.md
 test.ipynb
+shufflefasta.py

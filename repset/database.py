@@ -15,21 +15,21 @@ def run_psiblast(workdir, seqs, logger):
     # Create psiblast db
     if not (workdir / "db").exists():
         cmd = ["makeblastdb",
-          "-in", seqs,
+          "-in", str(seqs),
           "-input_type", "fasta",
-          "-out", workdir / "db",
+          "-out", str(workdir / "db"),
           "-dbtype", "prot"]
         logger.info(" ".join(cmd))
         subprocess.check_call(cmd)
     # Run psiblast
     if not (workdir / "psiblast_result.tab").exists():
         cmd = ["psiblast",
-          "-query", seqs,
-          "-db", workdir / "db",
+          "-query", str(seqs),
+          "-db", str(workdir / "db"),
           "-num_iterations", "6",
           "-outfmt", "6 qseqid sseqid pident length mismatch evalue bitscore",
           "-seg", "yes",
-          "-out", workdir / "psiblast_result.tab"
+          "-out", str(workdir / "psiblast_result.tab")
         ]
         logger.info(" ".join(cmd))
         subprocess.check_call(cmd)

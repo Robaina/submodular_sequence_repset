@@ -1,0 +1,11 @@
+name: repset_new
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+  - cruizperez
+dependencies:
+  - pandas
+  - blast
+  - biopython
+  - scikit-learn
