@@ -1,4 +1,4 @@
-name: repset_new
+name: repset
 channels:
   - conda-forge
   - bioconda
