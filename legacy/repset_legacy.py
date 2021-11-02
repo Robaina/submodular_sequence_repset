@@ -753,6 +753,7 @@ summaxwithin = {"eval": summaxwithin_eval,
 
 ######################
 # sumsumwithin
+# AKA: ?
 ######################
 
 def bisim(db, sim, seq_id1, seq_id2):
@@ -827,6 +828,7 @@ sumsumwithin = {"eval": sumsumwithin_eval,
 
 ######################
 # sumsumacross
+# AKA: ?
 ######################
 
 def sumsumacross_eval(db, seq_ids, sim):

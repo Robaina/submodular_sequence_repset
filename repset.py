@@ -10,7 +10,7 @@ from pathlib import Path
 import logging
 
 from repset.database import get_pident_from_file, run_psiblast
-from repset.objectives import MixtureObjective, summaxacross, sumsumwithin
+from repset.objectives import MixtureObjective, summaxacross, sumsumwithin, sumsumacross
 from repset.similarity import fraciden
 from repset.optimization import accelerated_greedy_selection
 
@@ -18,7 +18,7 @@ from repset.optimization import accelerated_greedy_selection
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Find representative sets of sequences of given size")
     parser.add_argument("--outdir", type=Path, required=True, help="Output directory")
-    parser.add_argument("--seqs", type=Path, required=True, help="Input sequences, fasta format")
+    parser.add_argument("--seqs", type=Path, required=False, default=None, help="Input sequences, fasta format. Not required if percent identity results are input.")
     parser.add_argument("--pi", type=str, default=None, help=(
         "Input text file with PI from els-alipid. "
         "If not provided, percent identities are computed per psiblast.")
@@ -66,8 +66,12 @@ if __name__ == "__main__":
         db = get_pident_from_file(pi_file=args.pi)
         print('Finished building database...')
     else:
+        if args.seqs is None:
+            raise ValueError("Sequences in fasta format are required.")
         db = run_psiblast(workdir, args.seqs, logger)
-    objective = MixtureObjective([summaxacross, sumsumwithin], [args.mixture, 1.0-args.mixture])
+        
+    # objective = MixtureObjective([summaxacross, sumsumwithin], [args.mixture, 1.0-args.mixture])
+    objective = MixtureObjective([summaxacross, sumsumacross], [args.mixture, 1.0-args.mixture])
     logger.info("-----------------------")
     logger.info("Starting mixture of summaxacross and sumsumwithin with weight %s...", args.mixture)
     sim, sim_name = ([fraciden, fraciden], "fraciden-fraciden")

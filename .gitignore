@@ -1,5 +1,6 @@
 repset/__pycache__/
 .ipynb_checkpoints/
+graph/
 NOTE.md
 test.ipynb
 shufflefasta.py

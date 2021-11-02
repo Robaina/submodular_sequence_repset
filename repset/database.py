@@ -73,7 +73,6 @@ def get_pident_from_file(pi_file):
     for i, row in df.iterrows():
         seq_id1 = row.seqname1.split('/')[0]
         seq_id2 = row.seqname2.split('/')[0]
-        # print(seq_id1, seq_id2)
         log10_e = -100
         pident = row['%id']
 
